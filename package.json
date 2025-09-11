@@ -1,0 +1,23 @@
+{
+	"name": "server-of-sensor",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"type": "module",
+	"scripts": {
+		"dev": "nodemon src/index.js",
+		"start": "node src/index.js"
+	},
+	"keywords": [],
+	"author": "Software Space",
+	"license": "ISC",
+	"dependencies": {
+		"cors": "^2.8.5",
+		"express": "^5.1.0",
+		"morgan": "^1.10.1",
+		"ws": "^8.18.3"
+	},
+	"devDependencies": {
+		"nodemon": "^3.1.10"
+	}
+}
