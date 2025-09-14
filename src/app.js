@@ -85,48 +85,6 @@ wss.on('connection', ws => {
   });
 });
 
-// Ruta para recibir la distancia del objeto detectado del ESP32
-app.post('/distance', (req, res) => {
-  const { distance } = req.body;
-
-  if (distance !== undefined) {
-    const timestamp = new Date().toISOString();
-    measurements.push({ 
-      id: Date.now(), // Añadir ID único
-      timestamp: formatearFechaISO12H(timestamp), 
-      distance 
-    });
-    
-    // Mantener solo las últimas 10 mediciones
-    if (measurements.length > 10) {
-      measurements.shift();
-    }
-    
-    console.log(`Recibido: Distancia = ${distance} cm`);
-    
-    // Enviar actualización a todos los clientes WebSocket
-    const message = JSON.stringify({ 
-      type: 'update',
-      measurements, 
-      activationDistance 
-    });
-    
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    });
-    
-    res.status(200).send();
-  } else {
-    res.status(400).send();
-  }
-});
-
-// Ruta para obtener la distancia de activación
-app.get('/activation-distance', (req, res) => {
-  res.send(String(activationDistance));
-});
 
 // Ruta para actualizar la distancia de activación desde la web
 app.post('/set-activation-distance', (req, res) => {
