@@ -1,7 +1,8 @@
 import express from 'express';
 import morgan from 'morgan';
 import { WebSocketServer } from 'ws';
-const app = express()
+
+const app = express();
 app.use(morgan('dev'));
 
 function formatearFechaISO12H(timestampISO) {
@@ -29,31 +30,93 @@ app.use(express.static('../client/public'));
 
 // Almacenar mediciones y distancia de activación
 let measurements = [];
-let activationDistance = 20.0; // Valor inicial (cm) del umbral
+let activationDistance = 20.0;
 
 // Configurar WebSocket
 const wss = new WebSocketServer({ port: 8080 });
+
 wss.on('connection', ws => {
+  console.log('Nuevo cliente WebSocket conectado');
+  
   // Enviar estado actual al conectar
-  ws.send(JSON.stringify({ measurements, activationDistance }));
+  ws.send(JSON.stringify({ 
+    type: 'initial-data',
+    measurements, 
+    activationDistance 
+  }));
+
+  // Manejar mensajes entrantes del ESP32
+  ws.on('message', message => {
+    try {
+      const data = JSON.parse(message);
+      
+      // Si el mensaje contiene distancia, procesarlo como el endpoint POST
+      if (data.distance !== undefined) {
+        const timestamp = new Date().toISOString();
+        measurements.push({ 
+          id: Date.now(), // Añadir ID único para cada medición
+          timestamp: formatearFechaISO12H(timestamp), 
+          distance: data.distance 
+        });
+        
+        // Mantener solo las últimas 15 mediciones
+        if (measurements.length > 15) {
+          measurements.shift();
+        }
+        
+        console.log(`Recibido por WS: Distancia = ${data.distance} cm`);
+        
+        // Enviar actualización a todos los clientes WebSocket
+        const updateMessage = JSON.stringify({ 
+          type: 'update',
+          measurements, 
+          activationDistance 
+        });
+        
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(updateMessage);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error procesando mensaje WebSocket:', error);
+    }
+  });
 });
 
 // Ruta para recibir la distancia del objeto detectado del ESP32
 app.post('/distance', (req, res) => {
   const { distance } = req.body;
+
   if (distance !== undefined) {
     const timestamp = new Date().toISOString();
-    measurements.push({ timestamp: formatearFechaISO12H(timestamp), distance });
-    // Mantener solo las últimas 50 mediciones
-    if (measurements.length > 50) measurements.shift();
+    measurements.push({ 
+      id: Date.now(), // Añadir ID único
+      timestamp: formatearFechaISO12H(timestamp), 
+      distance 
+    });
+    
+    // Mantener solo las últimas 10 mediciones
+    if (measurements.length > 10) {
+      measurements.shift();
+    }
+    
     console.log(`Recibido: Distancia = ${distance} cm`);
+    
     // Enviar actualización a todos los clientes WebSocket
-    const message = JSON.stringify({ measurements, activationDistance });
+    const message = JSON.stringify({ 
+      type: 'update',
+      measurements, 
+      activationDistance 
+    });
+    
     wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(message);
       }
     });
+    
     res.status(200).send();
   } else {
     res.status(400).send();
@@ -71,13 +134,20 @@ app.post('/set-activation-distance', (req, res) => {
   if (distance !== undefined && !isNaN(distance) && distance > 0) {
     activationDistance = parseFloat(distance);
     console.log(`Nueva distancia de activación: ${activationDistance} cm`);
+    
     // Notificar a los clientes WebSocket
-    const message = JSON.stringify({ measurements, activationDistance });
+    const message = JSON.stringify({ 
+      type: 'activation-update',
+      measurements, 
+      activationDistance 
+    });
+    
     wss.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(message);
       }
     });
+    
     res.status(200).send();
   } else {
     res.status(400).send();
@@ -88,4 +158,5 @@ app.post('/set-activation-distance', (req, res) => {
 app.get('/get-data', (req, res) => {
   res.json({ measurements, activationDistance });
 });
+
 export default app;
